@@ -1,31 +1,25 @@
-import openai
-from app.config import OPENAI_API_KEY
+from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 
-openai.api_key = OPENAI_API_KEY
-
+# Tone map for each platform
 TONE_MAP = {
     "twitter": "witty and concise",
     "linkedin": "professional and insightful",
     "instagram": "friendly and expressive"
 }
 
+# Load small model and tokenizer (CPU-friendly)
+tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+
+# Create generation pipeline
+generator = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
 def generate_reply(platform: str, post_text: str) -> str:
-    tone = TONE_MAP.get(platform.lower(), "natural and conversational")
-    prompt = (
-        f"Platform: {platform}\n"
-        f"Post: \"{post_text}\"\n"
-        f"Reply in a {tone} tone, making it seem written by a human. Avoid clichés and make it relevant to the post."
-    )
-    try:
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": "system", "content": "You're a social media assistant skilled at crafting engaging replies."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.8,
-            max_tokens=100
-        )
-        return response.choices[0].message.content.strip()
-    except Exception as e:
-        raise RuntimeError(f"OpenAI error: {e}")
+    tone = TONE_MAP.get(platform.lower(), "natural")
+    prompt = f"Write a {tone} human-like reply to the following post:\n\"{post_text}\""
+
+    result = generator(prompt, max_new_tokens=60, temperature=0.8, do_sample=True)
+    generated_text = result[0]["generated_text"]
+
+    # Strip out the prompt and keep only the reply
+    return generated_text.replace(prompt, "").strip()
